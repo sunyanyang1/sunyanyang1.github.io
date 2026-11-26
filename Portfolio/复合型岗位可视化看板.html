@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>复合型岗位对比分析看板 | Python + AIGC</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0d1333 100%);
+    color: #e0e6ed;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  
+  /* 背景网格动画 */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: 
+      linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+    background-size: 50px 50px;
+    z-index: 0;
+    animation: gridMove 20s linear infinite;
+  }
+  @keyframes gridMove {
+    0% { transform: translate(0, 0); }
+    100% { transform: translate(50px, 50px); }
+  }
+  
+  /* 背景光晕 */
+  .bg-glow {
+    position: fixed;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    filter: blur(150px);
+    opacity: 0.15;
+    z-index: 0;
+    animation: glowPulse 8s ease-in-out infinite;
+  }
+  .glow-1 { top: -200px; left: -200px; background: #00d4ff; }
+  .glow-2 { bottom: -200px; right: -200px; background: #7b68ee; animation-delay: 4s; }
+  @keyframes glowPulse {
+    0%, 100% { opacity: 0.1; transform: scale(1); }
+    50% { opacity: 0.2; transform: scale(1.1); }
+  }
+  
+  /* 标题区域 */
+  .header {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 30px 20px 10px;
+  }
+  .header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    background: linear-gradient(90deg, #00d4ff, #7b68ee, #00d4ff);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shine 4s linear infinite;
+    letter-spacing: 2px;
+  }
+  @keyframes shine {
+    0% { background-position: 0% center; }
+    100% { background-position: 200% center; }
+  }
+  .header .subtitle {
+    margin-top: 8px;
+    font-size: 14px;
+    color: #8892b0;
+    letter-spacing: 1px;
+  }
+  .header .divider {
+    width: 120px; height: 2px;
+    margin: 15px auto 0;
+    background: linear-gradient(90deg, transparent, #00d4ff, #7b68ee, transparent);
+  }
+  
+  /* KPI 概览条 */
+  .kpi-bar {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    padding: 25px 20px;
+    flex-wrap: wrap;
+  }
+  .kpi-card {
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.08), rgba(123, 104, 238, 0.08));
+    border: 1px solid rgba(0, 212, 255, 0.25);
+    border-radius: 12px;
+    padding: 16px 20px;
+    min-width: 160px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s, box-shadow 0.3s;
+  }
+  .kpi-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 30px rgba(0, 212, 255, 0.2);
+    border-color: rgba(0, 212, 255, 0.6);
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 2px;
+    background: linear-gradient(90deg, transparent, #00d4ff, transparent);
+    animation: scanLine 3s linear infinite;
+  }
+  @keyframes scanLine {
+    0% { left: -100%; }
+    100% { left: 100%; }
+  }
+  .kpi-card .label {
+    font-size: 11px;
+    color: #8892b0;
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .kpi-card .value {
+    font-size: 26px;
+    font-weight: 700;
+    color: #00d4ff;
+    text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+    display: inline-block;
+  }
+  .kpi-card .unit {
+    font-size: 13px;
+    color: #8892b0;
+    margin-left: 2px;
+  }
+  .kpi-card.highlight .value {
+    color: #ffd700;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  }
+  .kpi-card .sub {
+    font-size: 11px;
+    color: #5a6a8a;
+    margin-top: 4px;
+  }
+  
+  /* 主内容区 */
+  .main-content {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  
+  .chart-section {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+  
+  .chart-card {
+    background: linear-gradient(135deg, rgba(26, 31, 58, 0.8), rgba(13, 19, 51, 0.8));
+    border: 1px solid rgba(0, 212, 255, 0.15);
+    border-radius: 16px;
+    padding: 24px;
+    backdrop-filter: blur(10px);
+    position: relative;
+    overflow: hidden;
+  }
+  .chart-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #00d4ff, #7b68ee, #00d4ff, transparent);
+    background-size: 200% 100%;
+    animation: topBorder 4s linear infinite;
+  }
+  @keyframes topBorder {
+    0% { background-position: 0% 0%; }
+    100% { background-position: 200% 0%; }
+  }
+  
+  .chart-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #e0e6ed;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .chart-title::before {
+    content: '';
+    width: 4px; height: 20px;
+    background: linear-gradient(180deg, #00d4ff, #7b68ee);
+    border-radius: 2px;
+  }
+  .chart-subtitle {
+    font-size: 13px;
+    color: #8892b0;
+    margin-bottom: 16px;
+    padding-left: 14px;
+  }
+  
+  .chart-container {
+    width: 100%;
+    height: 450px;
+  }
+  
+  /* 图表总结分析 */
+  .insight-box {
+    margin-top: 20px;
+    padding: 18px 22px;
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.04), rgba(123, 104, 238, 0.04));
+    border-left: 3px solid #00d4ff;
+    border-radius: 0 8px 8px 0;
+    position: relative;
+  }
+  .insight-box::before {
+    content: '💡 洞察分析';
+    position: absolute;
+    top: -12px;
+    left: 12px;
+    background: #0a0e27;
+    padding: 2px 10px;
+    font-size: 12px;
+    color: #00d4ff;
+    border-radius: 4px;
+  }
+  .insight-box p {
+    font-size: 14px;
+    line-height: 1.8;
+    color: #b8c4d9;
+    margin-bottom: 8px;
+  }
+  .insight-box p:last-child { margin-bottom: 0; }
+  .insight-box strong { color: #ffd700; }
+  .insight-box .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    background: rgba(0, 212, 255, 0.15);
+    color: #00d4ff;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-right: 6px;
+  }
+  
+  /* 数据来源声明 */
+  .disclaimer {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 25px;
+    font-size: 12px;
+    color: #5a6a8a;
+    border-top: 1px solid rgba(0, 212, 255, 0.1);
+    margin-top: 20px;
+  }
+  
+  /* 响应式 */
+  @media (min-width: 900px) {
+    .chart-section { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 768px) {
+    .kpi-card { min-width: 130px; padding: 12px 14px; }
+    .kpi-card .value { font-size: 20px; }
+    .header h1 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 背景光晕 -->
+<div class="bg-glow glow-1"></div>
+<div class="bg-glow glow-2"></div>
+
+<div class="header">
+  <h1>复合型岗位对比分析看板</h1>
+  <div class="subtitle">Python + AIGC 复合技能 vs 基础服务岗位 | 数据可视化分析</div>
+  <div class="divider"></div>
+</div>
+
+<!-- KPI 概览条 -->
+<div class="kpi-bar" id="kpiBar">
+  <div class="kpi-card">
+    <div class="label">复合型时薪</div>
+    <div class="value" data-target="195.4">0</div>
+    <span class="unit">元</span>
+    <div class="sub">基础服务 29.4元</div>
+  </div>
+  <div class="kpi-card highlight">
+    <div class="label">薪资溢价倍数</div>
+    <div class="value" data-target="6.64">0</div>
+    <span class="unit">×</span>
+    <div class="sub">月收入 5.01×</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">复合型月收入</div>
+    <div class="value" data-target="14081">0</div>
+    <span class="unit">元</span>
+    <div class="sub">基础服务 2809元</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">每周工时</div>
+    <div class="value" data-target="16.6">0</div>
+    <span class="unit">小时</span>
+    <div class="sub">比基础少 5.5h</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">远程办公</div>
+    <div class="value" data-target="77.1">0</div>
+    <span class="unit">%</span>
+    <div class="sub">基础服务 0%</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">成长潜力</div>
+    <div class="value" data-target="4.51">0</div>
+    <span class="unit">/5</span>
+    <div class="sub">技能门槛 4.50/5</div>
+  </div>
+</div>
+
+<!-- 主内容区 -->
+<div class="main-content">
+  <div class="chart-section">
+    
+    <!-- 图表1: 三口径薪资对比柱状图 -->
+    <div class="chart-card">
+      <div class="chart-title">三口径薪资对比</div>
+      <div class="chart-subtitle">复合型岗位 vs 基础服务岗位 | 时薪 / 日薪 / 月收入</div>
+      <div class="chart-container" id="salaryChart"></div>
+      <div class="insight-box">
+        <p><span class="tag">核心发现</span><strong>复合型岗位在三个薪资口径上均呈现数量级差距</strong>：时薪 6.64×、日薪 6.57×、月收入 5.01×。</p>
+        <p><span class="tag">结构优势</span>复合型不仅单价高，而且<strong>工时更短</strong>（每周少 5.4 小时），属于"高单价 + 低时长"的优质供给结构。</p>
+        <p><span class="tag">数据说明</span>复合型 P10（147.4元）仍是基础服务最大值（49.3元）的 3 倍，两组分布<strong>完全不重叠</strong>，不是"头部拉高均值"的假象。</p>
+      </div>
+    </div>
+    
+    <!-- 图表2: 六维能力雷达图 -->
+    <div class="chart-card">
+      <div class="chart-title">六维能力雷达图</div>
+      <div class="chart-subtitle">五类技能方向综合能力对比 | 薪资、成长、门槛、热度、远程、月收入</div>
+      <div class="chart-container" id="radarChart"></div>
+      <div class="insight-box">
+        <p><span class="tag">全能优势</span><strong>Python + AIGC 复合型在六个维度全面外扩</strong>，形成明显的"1+1>2"组合溢价效应。</p>
+        <p><span class="tag">组合溢价</span>对比纯 Python（95.8元时薪）和纯 AIGC（130.3元时薪），复合型（195.4元）较两者分别高出 <strong>104.0%</strong> 和 <strong>50.0%</strong>。</p>
+        <p><span class="tag">可进入性</span>虽技能门槛 4.50/5，但 <strong>88.6%</strong> 的岗位培训后可胜任，<strong>74.2%</strong> 学历要求在大专及以下，是可通过系统训练进入的高回报通道。</p>
+      </div>
+    </div>
+    
+  </div>
+</div>
+
+<div class="disclaimer">
+  ⚠️ 数据来源：兼职岗位数据.csv（30,000 条，模拟演示数据 | 2025-01 至 2026-06，覆盖 20 个城市）<br>
+  本页面仅用于数据可视化演示，不代表真实劳动力市场行情
+</div>
+
+<script>
+// ========== KPI 数字滚动动画 ==========
+function animateKPIs() {
+  const cards = document.querySelectorAll('#kpiBar .kpi-card');
+  cards.forEach(card => {
+    const valueEl = card.querySelector('.value');
+    const target = parseFloat(valueEl.dataset.target);
+    const isLarge = target >= 1000;
+    
+    let current = 0;
+    const duration = 2000;
+    const startTime = performance.now();
+    
+    function step(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      current = target * ease;
+      
+      if (isLarge) {
+        valueEl.textContent = Math.round(current).toLocaleString();
+      } else if (target % 1 !== 0 || target < 20) {
+        valueEl.textContent = current.toFixed(2).replace(/\.?0+$/, '');
+      } else {
+        valueEl.textContent = current.toFixed(1);
+      }
+      
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      }
+    }
+    
+    requestAnimationFrame(step);
+  });
+}
+animateKPIs();
+
+// ========== 图表1: 三口径薪资对比柱状图 ==========
+function initSalaryChart() {
+  const chart = echarts.init(document.getElementById('salaryChart'), 'dark');
+  
+  const data = {
+    categories: ['时薪均值', '参考日薪均值', '预计月收入均值'],
+    compound: [195.4, 1160.7, 14081],
+    basic: [29.4, 176.6, 2809],
+    multiples: ['6.64×', '6.57×', '5.01×']
+  };
+  
+  const option = {
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      backgroundColor: 'rgba(13, 19, 51, 0.95)',
+      borderColor: '#00d4ff',
+      textStyle: { color: '#e0e6ed' },
+      formatter: function(params) {
+        let html = `<div style="font-weight:600;margin-bottom:8px">${params[0].axisValue}</div>`;
+        params.forEach(p => {
+          html += `<div style="display:flex;align-items:center;gap:6px;margin:4px 0">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${p.color}"></span>
+            ${p.seriesName}: <strong>${p.value.toLocaleString()}</strong> 元
+          </div>`;
+        });
+        const idx = params[0].dataIndex;
+        html += `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.1);color:#ffd700;font-weight:600">
+          ⚡ 溢价倍数: ${data.multiples[idx]}
+        </div>`;
+        return html;
+      }
+    },
+    legend: {
+      data: ['复合型岗位 (Python+AIGC)', '基础服务岗位'],
+      top: 10,
+      textStyle: { color: '#b8c4d9', fontSize: 12 },
+      itemGap: 30
+    },
+    grid: {
+      left: '8%',
+      right: '8%',
+      bottom: '12%',
+      top: '22%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: data.categories,
+      axisLine: { lineStyle: { color: 'rgba(0, 212, 255, 0.3)' } },
+      axisLabel: { color: '#b8c4d9', fontSize: 13, interval: 0 }
+    },
+    yAxis: {
+      type: 'value',
+      name: '金额（元）',
+      nameTextStyle: { color: '#8892b0' },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { 
+        color: '#8892b0',
+        formatter: function(val) {
+          if (val >= 1000) return (val/1000) + 'k';
+          return val;
+        }
+      },
+      splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
+    },
+    series: [
+      {
+        name: '复合型岗位 (Python+AIGC)',
+        type: 'bar',
+        data: data.compound,
+        barWidth: '28%',
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#00d4ff' },
+            { offset: 1, color: '#0066cc' }
+          ]),
+          borderRadius: [6, 6, 0, 0],
+          shadowBlur: 20,
+          shadowColor: 'rgba(0, 212, 255, 0.5)'
+        },
+        emphasis: {
+          itemStyle: {
+            shadowBlur: 40,
+            shadowColor: 'rgba(0, 212, 255, 0.9)'
+          }
+        },
+        label: {
+          show: true,
+          position: 'top',
+          color: '#00d4ff',
+          fontWeight: 'bold',
+          fontSize: 13,
+          formatter: function(p) { return p.value.toLocaleString(); }
+        },
+        animationDuration: 1500,
+        animationEasing: 'elasticOut'
+      },
+      {
+        name: '基础服务岗位',
+        type: 'bar',
+        data: data.basic,
+        barWidth: '28%',
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#ff6b7a' },
+            { offset: 1, color: '#c0392b' }
+          ]),
+          borderRadius: [6, 6, 0, 0],
+          shadowBlur: 10,
+          shadowColor: 'rgba(255, 71, 87, 0.3)'
+        },
+        emphasis: {
+          itemStyle: { shadowBlur: 25, shadowColor: 'rgba(255, 71, 87, 0.7)' }
+        },
+        label: {
+          show: true,
+          position: 'top',
+          color: '#ff6b7a',
+          fontWeight: 'bold',
+          fontSize: 13,
+          formatter: function(p) { return p.value.toLocaleString(); }
+        },
+        animationDuration: 1500,
+        animationEasing: 'elasticOut',
+        animationDelay: function(idx) { return idx * 250; }
+      }
+    ]
+  };
+  
+  chart.setOption(option);
+  
+  // 持续高亮轮播动画
+  let highlightIdx = 0;
+  setInterval(() => {
+    chart.dispatchAction({ type: 'downplay', seriesIndex: highlightIdx % 2, dataIndex: highlightIdx % 3 });
+    highlightIdx++;
+    chart.dispatchAction({ type: 'highlight', seriesIndex: highlightIdx % 2, dataIndex: highlightIdx % 3 });
+    chart.dispatchAction({ type: 'showTip', seriesIndex: highlightIdx % 2, dataIndex: highlightIdx % 3 });
+  }, 2800);
+  
+  window.addEventListener('resize', () => chart.resize());
+  return chart;
+}
+
+// ========== 图表2: 六维能力雷达图 ==========
+function initRadarChart() {
+  const chart = echarts.init(document.getElementById('radarChart'), 'dark');
+  
+  // 数据基于报告归一化计算：(x-min)/(max-min)*100
+  // 维度: 薪资指数、成长潜力、技能门槛、岗位热度、远程办公、月收入
+  const radarData = {
+    dimensions: [
+      { name: '薪资指数', max: 100 },
+      { name: '成长潜力', max: 100 },
+      { name: '技能门槛', max: 100 },
+      { name: '岗位热度', max: 100 },
+      { name: '远程办公', max: 100 },
+      { name: '月收入', max: 100 }
+    ],
+    series: [
+      { name: 'Python+AIGC (复合型)', color: '#00d4ff',  value: [100.0, 100.0, 100.0, 100.0, 100.0, 100.0] },
+      { name: '纯 AIGC',             color: '#2ed573',  value: [ 60.8,  99.6,  83.7,  81.2,  90.9,  58.0] },
+      { name: '纯 Python',           color: '#ffa502',  value: [ 40.0,  79.7,  66.4,  59.0,  75.0,  42.0] },
+      { name: '普通数字岗位',        color: '#a55eea',  value: [  7.6,  50.0,  35.0,  45.0,  40.0,  12.0] },
+      { name: '基础服务',            color: '#ff4757',  value: [  0.0,   0.0,   0.0,   0.0,   0.0,   0.0] }
+    ]
+  };
+  
+  const names = radarData.series.map(s => s.name);
+  
+  const option = {
+    backgroundColor: 'transparent',
+    tooltip: {
+      backgroundColor: 'rgba(13, 19, 51, 0.95)',
+      borderColor: '#00d4ff',
+      textStyle: { color: '#e0e6ed' }
+    },
+    legend: {
+      data: names,
+      top: 8,
+      textStyle: { color: '#b8c4d9', fontSize: 11 },
+      itemGap: 10,
+      itemWidth: 10,
+      itemHeight: 10
+    },
+    radar: {
+      indicator: radarData.dimensions,
+      center: ['50%', '58%'],
+      radius: '68%',
+      startAngle: 90,
+      splitNumber: 5,
+      axisName: { color: '#b8c4d9', fontSize: 12, fontWeight: 500 },
+      splitLine: { lineStyle: { color: 'rgba(0, 212, 255, 0.12)' } },
+      splitArea: {
+        show: true,
+        areaStyle: { color: ['rgba(0, 212, 255, 0.02)', 'rgba(0, 212, 255, 0.04)'] }
+      },
+      axisLine: { lineStyle: { color: 'rgba(0, 212, 255, 0.18)' } }
+    },
+    series: [{
+      name: '技能方向对比',
+      type: 'radar',
+      emphasis: { lineStyle: { width: 4 } },
+      data: radarData.series.map((s, i) => ({
+        value: s.value,
+        name: s.name,
+        symbol: 'circle',
+        symbolSize: i === 0 ? 10 : 7,
+        lineStyle: {
+          width: i === 0 ? 3 : 1.5,
+          opacity: i === 0 ? 1 : 0.6
+        },
+        areaStyle: {
+          color: s.color,
+          opacity: i === 0 ? 0.45 : 0.12
+        },
+        itemStyle: {
+          color: s.color,
+          borderColor: '#fff',
+          borderWidth: 1.5,
+          shadowBlur: i === 0 ? 15 : 0,
+          shadowColor: s.color
+        }
+      }))
+    }],
+    animationDuration: 2000,
+    animationEasing: 'cubicOut',
+    animationDelay: function(idx) { return idx * 150; }
+  };
+  
+  chart.setOption(option);
+  
+  // 雷达脉冲动画 - 复合型区域呼吸效果
+  let pulseDir = 1;
+  let pulseOpacity = 0.45;
+  setInterval(() => {
+    pulseOpacity += pulseDir * 0.015;
+    if (pulseOpacity >= 0.7) pulseDir = -1;
+    if (pulseOpacity <= 0.25) pulseDir = 1;
+    
+    const opt = chart.getOption();
+    opt.series[0].data[0].areaStyle.opacity = pulseOpacity;
+    chart.setOption(opt, true);
+  }, 80);
+  
+  // 轮播高亮不同系列
+  let highlightRadarIdx = 0;
+  setInterval(() => {
+    chart.dispatchAction({ type: 'downplay', seriesIndex: 0, dataIndex: highlightRadarIdx });
+    highlightRadarIdx = (highlightRadarIdx + 1) % names.length;
+    chart.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: highlightRadarIdx });
+    chart.dispatchAction({ type: 'showTip', seriesIndex: 0, dataIndex: highlightRadarIdx });
+  }, 3200);
+  
+  window.addEventListener('resize', () => chart.resize());
+  return chart;
+}
+
+// ========== 初始化 ==========
+window.addEventListener('DOMContentLoaded', () => {
+  initSalaryChart();
+  initRadarChart();
+});
+</script>
+
+</body>
+</html>
