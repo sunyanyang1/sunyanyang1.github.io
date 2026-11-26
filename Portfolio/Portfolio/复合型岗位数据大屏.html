@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>复合型岗位数据可视化大屏 | Python + AIGC</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  :root {
+    --cyan: #00e5ff;
+    --purple: #8b7cff;
+    --pink: #ff5c7c;
+    --gold: #ffc857;
+    --green: #4ade80;
+    --text: #e8f3ff;
+    --muted: #7d90b8;
+    --line: rgba(0, 229, 255, .16);
+    --panel: rgba(10, 22, 46, .62);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { min-height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(1200px 620px at 12% -12%, rgba(0, 229, 255, .16), transparent 62%),
+      radial-gradient(1000px 540px at 92% -4%, rgba(123, 104, 238, .18), transparent 62%),
+      linear-gradient(rgba(4, 8, 20, .93), rgba(4, 8, 20, .97)),
+      url('背景图.png') center / cover fixed no-repeat;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  /* 背景网格漂移 */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      linear-gradient(rgba(0, 229, 255, .035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 229, 255, .035) 1px, transparent 1px);
+    background-size: 56px 56px;
+    -webkit-mask-image: radial-gradient(circle at 50% 32%, #000 18%, transparent 86%);
+    mask-image: radial-gradient(circle at 50% 32%, #000 18%, transparent 86%);
+    animation: gridDrift 24s linear infinite;
+  }
+  @keyframes gridDrift {
+    to { background-position: 56px 56px, 56px 56px; }
+  }
+  /* 全屏扫描光 */
+  .scan-overlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    overflow: hidden;
+  }
+  .scan-overlay::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    height: 180px;
+    background: linear-gradient(180deg, transparent, rgba(0, 229, 255, .045), transparent);
+    animation: screenScan 10s linear infinite;
+  }
+  @keyframes screenScan {
+    0% { transform: translateY(-200px); }
+    100% { transform: translateY(110vh); }
+  }
+  .particles { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+  .particle {
+    position: absolute;
+    bottom: -12px;
+    border-radius: 50%;
+    background: rgba(0, 229, 255, .55);
+    box-shadow: 0 0 10px rgba(0, 229, 255, .8);
+    animation: floatUp linear infinite;
+  }
+  @keyframes floatUp {
+    0% { transform: translateY(0) scale(.7); opacity: 0; }
+    15% { opacity: .7; }
+    85% { opacity: .5; }
+    100% { transform: translateY(-105vh) scale(1.1); opacity: 0; }
+  }
+
+  .screen {
+    position: relative;
+    z-index: 2;
+    max-width: 1800px;
+    margin: 0 auto;
+    padding: 18px 24px 26px;
+  }
+
+  /* ---------- 顶部 ---------- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 8px 4px 18px;
+    border-bottom: 1px solid rgba(0, 229, 255, .14);
+    position: relative;
+  }
+  .topbar::after {
+    content: '';
+    position: absolute;
+    left: 0; bottom: -1px;
+    width: 220px; height: 1px;
+    background: linear-gradient(90deg, var(--cyan), transparent);
+    animation: topSweep 5s ease-in-out infinite alternate;
+  }
+  @keyframes topSweep {
+    from { width: 120px; opacity: .5; }
+    to { width: 42%; opacity: 1; }
+  }
+  .brand { display: flex; align-items: center; gap: 16px; min-width: 0; }
+  .orb { position: relative; width: 46px; height: 46px; flex: 0 0 46px; }
+  .orb .core {
+    position: absolute; inset: 12px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #ffffff, #00e5ff 38%, #0077ff 75%);
+    box-shadow: 0 0 22px rgba(0, 229, 255, .9), 0 0 46px rgba(0, 229, 255, .45);
+  }
+  .orb .ring {
+    position: absolute; inset: 0;
+    border: 1px solid rgba(0, 229, 255, .55);
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 3.2s linear infinite;
+  }
+  .orb .ring:nth-child(2) { inset: 5px; animation-duration: 2.1s; animation-direction: reverse; border-color: rgba(139, 124, 255, .5); border-bottom-color: transparent; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .title h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    background: linear-gradient(90deg, #7ef4ff, #00e5ff 30%, #8b7cff 55%, #7ef4ff 80%);
+    background-size: 220% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shine 5s linear infinite;
+    white-space: nowrap;
+  }
+  @keyframes shine {
+    to { background-position: 220% center; }
+  }
+  .title p {
+    margin-top: 5px;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: .6px;
+  }
+  .title p em {
+    font-style: normal;
+    color: var(--gold);
+    border: 1px solid rgba(255, 200, 87, .32);
+    background: rgba(255, 200, 87, .08);
+    border-radius: 20px;
+    padding: 1px 8px;
+    margin-left: 8px;
+    font-size: 11px;
+  }
+  .meta { display: flex; align-items: center; gap: 18px; flex: 0 0 auto; }
+  .live {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; letter-spacing: 2px; color: var(--cyan);
+  }
+  .live i {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 10px var(--cyan);
+    animation: blink 1.2s ease-in-out infinite;
+  }
+  @keyframes blink { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .25; transform: scale(.7); } }
+  .clock {
+    font-size: 24px; font-weight: 600; letter-spacing: 2px;
+    font-variant-numeric: tabular-nums;
+    color: #cfe9ff;
+    text-shadow: 0 0 18px rgba(0, 229, 255, .45);
+  }
+  .date { font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+
+  /* ---------- KPI ---------- */
+  .kpi-bar {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 14px;
+    margin: 20px 0 20px;
+  }
+  .kpi-card {
+    position: relative;
+    overflow: hidden;
+    padding: 14px 16px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 229, 255, .2);
+    background: linear-gradient(150deg, rgba(0, 229, 255, .09), rgba(123, 104, 238, .07) 55%, rgba(6, 14, 32, .65));
+    backdrop-filter: blur(10px);
+    box-shadow: inset 0 0 30px rgba(0, 229, 255, .04), 0 8px 24px rgba(0, 0, 0, .3);
+    transition: transform .3s, border-color .3s, box-shadow .3s;
+  }
+  .kpi-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(0, 229, 255, .6);
+    box-shadow: 0 10px 34px rgba(0, 229, 255, .18);
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    animation: kpiScan 3.6s linear infinite;
+  }
+  @keyframes kpiScan { to { left: 100%; } }
+  .kpi-card::after {
+    content: '';
+    position: absolute;
+    right: -22px; bottom: -30px;
+    width: 82px; height: 82px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 229, 255, .16);
+    animation: ripple 4s ease-out infinite;
+  }
+  @keyframes ripple {
+    0% { transform: scale(.6); opacity: .7; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+  .kpi-label { font-size: 11px; color: #8ea4cc; letter-spacing: 1px; margin-bottom: 6px; }
+  .kpi-value { display: flex; align-items: baseline; gap: 3px; }
+  .kpi-value .num {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--cyan);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 20px rgba(0, 229, 255, .5);
+    animation: valuePulse 3s ease-in-out infinite;
+  }
+  @keyframes valuePulse {
+    0%, 100% { text-shadow: 0 0 16px rgba(0, 229, 255, .35); }
+    50% { text-shadow: 0 0 26px rgba(0, 229, 255, .75); }
+  }
+  .kpi-value .unit { font-size: 12px; color: #8ea4cc; }
+  .kpi-sub { margin-top: 5px; font-size: 11px; color: #61769c; white-space: nowrap; }
+  .kpi-card.gold { border-color: rgba(255, 200, 87, .28); background: linear-gradient(150deg, rgba(255, 200, 87, .1), rgba(255, 92, 124, .06) 60%, rgba(6, 14, 32, .65)); }
+  .kpi-card.gold .kpi-value .num { color: var(--gold); text-shadow: 0 0 20px rgba(255, 200, 87, .5); animation: none; }
+  .kpi-card.gold::before { background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+
+  /* ---------- 图表网格 ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .card {
+    position: relative;
+    overflow: hidden;
+    height: 350px;
+    display: flex;
+    flex-direction: column;
+    padding: 13px 15px 8px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: linear-gradient(160deg, rgba(11, 25, 52, .8), rgba(5, 12, 28, .88));
+    backdrop-filter: blur(9px);
+    box-shadow: inset 0 0 44px rgba(0, 229, 255, .035), 0 12px 32px rgba(0, 0, 0, .35);
+    transition: border-color .3s, box-shadow .3s;
+  }
+  .card:hover {
+    border-color: rgba(0, 229, 255, .42);
+    box-shadow: inset 0 0 54px rgba(0, 229, 255, .06), 0 16px 40px rgba(0, 229, 255, .12);
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--cyan), var(--purple), transparent);
+    background-size: 200% 100%;
+    animation: borderFlow 5s linear infinite;
+    opacity: .75;
+  }
+  @keyframes borderFlow { to { background-position: 200% 0; } }
+  .card::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0; left: -60%;
+    width: 40%;
+    background: linear-gradient(100deg, transparent, rgba(0, 229, 255, .045), transparent);
+    transform: skewX(-18deg);
+    animation: cardSweep 7s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes cardSweep {
+    0%, 60% { left: -60%; }
+    100% { left: 130%; }
+  }
+  .card-head {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 6px;
+  }
+  .card-head h3 {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: .8px;
+    color: #dbe9ff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+  .card-head h3::before {
+    content: '';
+    width: 3px; height: 14px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, var(--cyan), var(--purple));
+    box-shadow: 0 0 10px rgba(0, 229, 255, .7);
+  }
+  .tag {
+    font-size: 10px;
+    letter-spacing: .5px;
+    color: var(--cyan);
+    border: 1px solid rgba(0, 229, 255, .28);
+    background: rgba(0, 229, 255, .06);
+    border-radius: 20px;
+    padding: 2px 8px;
+    white-space: nowrap;
+  }
+  .chart { flex: 1; width: 100%; min-height: 0; position: relative; z-index: 1; }
+  .span2 { grid-column: span 2; }
+
+  .footnote {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(0, 229, 255, .1);
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 11px;
+    color: #56688c;
+    letter-spacing: .5px;
+  }
+  .footnote b { color: #8ea4cc; font-weight: 500; }
+
+  @media (max-width: 1500px) {
+    .kpi-bar { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  @media (max-width: 1200px) {
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .span2 { grid-column: span 2; }
+    .title h1 { font-size: 23px; }
+    .clock { font-size: 20px; }
+  }
+  @media (max-width: 820px) {
+    .screen { padding: 14px; }
+    .kpi-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid { grid-template-columns: 1fr; }
+    .span2 { grid-column: span 1; }
+    .topbar { flex-direction: column; align-items: flex-start; }
+    .meta { width: 100%; justify-content: space-between; }
+    .title h1 { white-space: normal; font-size: 20px; }
+    .card { height: 330px; }
+  }
+</style>
+</head>
+<body>
+<div class="particles" id="particles"></div>
+<div class="scan-overlay"></div>
+
+<div class="screen">
+  <header class="topbar">
+    <div class="brand">
+      <div class="orb"><div class="core"></div><div class="ring"></div><div class="ring"></div></div>
+      <div class="title">
+        <h1>复合型岗位数据可视化大屏</h1>
+        <p>Python + AIGC 复合型兼职岗位 × 基础服务岗位 · 多维对比分析<em>模拟演示数据</em></p>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="live"><i></i> LIVE</div>
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="date" id="date"></div>
+    </div>
+  </header>
+
+  <section class="kpi-bar" id="kpiBar">
+<div class="kpi-card ">
+  <div class="kpi-label">复合型岗位样本</div>
+  <div class="kpi-value"><span class="num" data-target="5032" data-decimals="0">0</span><span class="unit">条</span></div>
+  <div class="kpi-sub">占全部岗位 16.8%</div>
+</div>
+<div class="kpi-card ">
+  <div class="kpi-label">平均时薪</div>
+  <div class="kpi-value"><span class="num" data-target="195.4" data-decimals="1">0</span><span class="unit">元</span></div>
+  <div class="kpi-sub">中位数 192.2 元</div>
+</div>
+<div class="kpi-card gold">
+  <div class="kpi-label">相对基础服务溢价</div>
+  <div class="kpi-value"><span class="num" data-target="6.64" data-decimals="2">0</span><span class="unit">×</span></div>
+  <div class="kpi-sub">时薪差 +166.0 元</div>
+</div>
+<div class="kpi-card ">
+  <div class="kpi-label">平均月收入</div>
+  <div class="kpi-value"><span class="num" data-target="14081" data-decimals="0">0</span><span class="unit">元</span></div>
+  <div class="kpi-sub">每周仅 16.6 小时</div>
+</div>
+<div class="kpi-card gold">
+  <div class="kpi-label">时薪同比增长</div>
+  <div class="kpi-value"><span class="num" data-target="15.0" data-decimals="1">0</span><span class="unit">%</span></div>
+  <div class="kpi-sub">+2025H1 → 2026H1</div>
+</div>
+<div class="kpi-card ">
+  <div class="kpi-label">远程办公占比</div>
+  <div class="kpi-value"><span class="num" data-target="77.1" data-decimals="1">0</span><span class="unit">%</span></div>
+  <div class="kpi-sub">基础服务 0.0%</div>
+</div>
+<div class="kpi-card ">
+  <div class="kpi-label">岗位热度指数</div>
+  <div class="kpi-value"><span class="num" data-target="91.6" data-decimals="1">0</span><span class="unit"></span></div>
+  <div class="kpi-sub">基础服务 62.8</div>
+</div>
+  </section>
+
+  <main class="grid">
+    <section class="card">
+      <div class="card-head"><h3>三口径薪资对比</h3><span class="tag">数量级差距</span></div>
+      <div class="chart" id="salaryChart"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3>时薪分位分布</h3><span class="tag">分布不重叠</span></div>
+      <div class="chart" id="boxChart"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3>技能组合溢价阶梯</h3><span class="tag">1 + 1 &gt; 2</span></div>
+      <div class="chart" id="ladderChart"></div>
+    </section>
+
+    <section class="card span2">
+      <div class="card-head"><h3>薪资溢价走势</h3><span class="tag">倍数 6.08 → 7.17</span></div>
+      <div class="chart" id="trendChart"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3>招聘份额结构</h3><span class="tag">份额稳定 17%</span></div>
+      <div class="chart" id="shareChart"></div>
+    </section>
+
+    <section class="card span2">
+      <div class="card-head"><h3>月度招聘人数趋势</h3><span class="tag">高位平台 + 季节波动</span></div>
+      <div class="chart" id="recruitChart"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3>城市等级薪资对比</h3><span class="tag">倍数恒定 6.6×</span></div>
+      <div class="chart" id="cityChart"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3>城市机会气泡</h3><span class="tag">20 城市</span></div>
+      <div class="chart" id="cityBubble"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3>六维能力雷达</h3><span class="tag">全面外扩</span></div>
+      <div class="chart" id="radarChart"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3>复合岗位薪资排行</h3><span class="tag">极差仅 3.1%</span></div>
+      <div class="chart" id="jobChart"></div>
+    </section>
+
+    <section class="card span2">
+      <div class="card-head"><h3>工时—收入效率象限</h3><span class="tag">低工时 · 高收入</span></div>
+      <div class="chart" id="quadrantChart"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h3>行业指标热力</h3><span class="tag">跨行业通用</span></div>
+      <div class="chart" id="heatmapChart"></div>
+    </section>
+  </main>
+
+  <footer class="footnote">
+    <span>数据来源：<b>兼职岗位数据.csv</b> · 30,000 条模拟演示数据 · 2025-01 至 2026-06 · 覆盖 20 个城市</span>
+    <span>分析口径参考《复合型岗位对比分析报告》 · 数据仅用于课程演示，不代表真实招聘报价</span>
+  </footer>
+</div>
+
+<script>
+const DATA = {"colors": {"基础服务": "#ff5c7c", "普通数字岗位": "#4ade80", "Python": "#8b7cff", "AIGC": "#ffc857", "Python+AIGC": "#00e5ff"}, "groups": ["基础服务", "普通数字岗位", "Python", "AIGC", "Python+AIGC"], "kpiRaw": {"multiple": 6.64, "diff": 166.0, "yoy": 15.0}, "salaryCompare": {"categories": ["时薪（元）", "日薪（元）", "月收入（元）"], "compound": [195.4, 1160.7, 14081], "basic": [29.4, 176.6, 2809]}, "box": {"groups": ["基础服务", "普通数字岗位", "Python", "AIGC", "Python+AIGC"], "data": [[16.2, 25.6, 28.9, 32.8, 49.3], [22.6, 36.1, 41.2, 47.1, 73.1], [52.4, 82.2, 94.0, 107.3, 164.0], [67.4, 112.1, 128.3, 146.5, 245.6], [92.5, 167.1, 192.2, 219.7, 320.0]], "medians": [28.9, 41.2, 94.0, 128.3, 192.2]}, "trend": {"months": ["2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"], "compound": [176.2, 175.6, 181.4, 184.3, 187.1, 187.1, 188.7, 188.9, 197.7, 197.0, 199.0, 199.9, 202.9, 206.1, 206.6, 214.3, 212.3, 213.8], "basic": [29.0, 29.1, 29.4, 29.8, 29.1, 29.5, 29.5, 29.4, 29.4, 29.4, 29.4, 29.5, 29.5, 29.6, 29.1, 29.4, 29.8, 29.8], "diff": [147.2, 146.5, 152.0, 154.5, 158.0, 157.6, 159.2, 159.5, 168.3, 167.6, 169.6, 170.4, 173.4, 176.5, 177.5, 184.9, 182.5, 184.0]}, "recruit": {"months": ["2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"], "series": {"基础服务": [2556, 2006, 2482, 2491, 2216, 2122, 2274, 2226, 2289, 2467, 2534, 2284, 2365, 1987, 2412, 2094, 2309, 2579], "普通数字岗位": [787, 773, 807, 766, 740, 820, 851, 689, 732, 820, 783, 752, 829, 727, 856, 800, 822, 732], "Python": [855, 770, 838, 816, 870, 862, 805, 829, 743, 899, 868, 844, 775, 808, 1007, 769, 877, 817], "AIGC": [931, 972, 885, 988, 1040, 982, 1044, 868, 1033, 1087, 1037, 1022, 1046, 942, 1043, 1065, 1037, 965], "Python+AIGC": [854, 712, 845, 843, 826, 964, 792, 1026, 778, 848, 803, 692, 901, 672, 898, 873, 842, 858]}}, "share": {"months": ["2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"], "series": {"基础服务": [32.3, 29.2, 32.8, 31.7, 30.2, 29.1, 30.8, 30.2, 31.4, 31.4, 32.0, 32.1, 29.6, 30.4, 29.6, 28.7, 30.3, 33.2], "普通数字岗位": [15.1, 16.6, 15.8, 15.4, 15.3, 16.0, 16.9, 14.4, 15.4, 15.4, 15.0, 15.6, 17.6, 16.4, 16.0, 16.3, 16.4, 14.2], "Python": [16.9, 17.0, 16.4, 16.3, 17.9, 16.6, 15.6, 17.0, 15.4, 16.6, 16.5, 17.2, 15.3, 17.5, 18.3, 15.6, 16.7, 16.4], "AIGC": [18.9, 21.0, 18.5, 19.2, 20.7, 19.4, 20.6, 18.5, 20.9, 20.5, 20.1, 20.4, 20.7, 20.5, 19.3, 21.7, 19.9, 19.3], "Python+AIGC": [16.9, 16.2, 16.5, 17.4, 16.0, 18.9, 16.1, 20.0, 16.9, 16.2, 16.3, 14.6, 16.8, 15.1, 16.7, 17.7, 16.6, 17.0]}}, "ladder": {"labels": ["基础服务", "普通数字岗位", "Python", "AIGC", "Python+AIGC"], "values": [29.4, 42.0, 95.8, 130.3, 195.4], "growth": [null, 42.9, 128.1, 36.0, 50.0]}, "cityLevel": {"labels": ["一线", "新一线", "二线"], "compound": [231.7, 196.3, 176.8], "basic": [34.6, 29.6, 26.5], "multiple": [6.69, 6.62, 6.66]}, "cityBubble": [{"name": "上海", "level": "一线", "value": [254, 238.7, 743]}, {"name": "北京", "level": "一线", "value": [256, 237.8, 782]}, {"name": "深圳", "level": "一线", "value": [247, 230.4, 758]}, {"name": "广州", "level": "一线", "value": [244, 219.1, 730]}, {"name": "杭州", "level": "新一线", "value": [239, 214.4, 690]}, {"name": "苏州", "level": "新一线", "value": [225, 206.3, 644]}, {"name": "南京", "level": "新一线", "value": [244, 203.5, 692]}, {"name": "成都", "level": "新一线", "value": [269, 193.6, 811]}, {"name": "武汉", "level": "新一线", "value": [233, 192.2, 720]}, {"name": "重庆", "level": "新一线", "value": [262, 188.7, 796]}, {"name": "西安", "level": "新一线", "value": [258, 188.1, 788]}, {"name": "青岛", "level": "二线", "value": [253, 187.2, 733]}, {"name": "长沙", "level": "新一线", "value": [256, 186.7, 754]}, {"name": "济南", "level": "二线", "value": [269, 185.9, 822]}, {"name": "合肥", "level": "二线", "value": [273, 180.4, 852]}, {"name": "郑州", "level": "二线", "value": [231, 177.7, 692]}, {"name": "昆明", "level": "二线", "value": [241, 172.7, 715]}, {"name": "石家庄", "level": "二线", "value": [276, 172.0, 826]}, {"name": "南昌", "level": "二线", "value": [252, 171.0, 742]}, {"name": "贵阳", "level": "二线", "value": [250, 166.8, 737]}], "radar": {"indicators": ["时薪水平", "成长潜力", "技能门槛", "岗位热度", "远程办公", "月收入水平"], "series": [{"name": "Python+AIGC", "value": [100.0, 100.0, 100.0, 100.0, 100.0, 100.0]}, {"name": "AIGC", "value": [66.7, 99.8, 89.1, 94.0, 90.9, 66.1]}, {"name": "Python", "value": [49.0, 88.7, 77.6, 87.1, 75.0, 49.0]}, {"name": "基础服务", "value": [15.0, 44.3, 33.1, 68.6, 0.0, 19.9]}]}, "jobs": {"names": ["多模态数据处理助理", "智能选品工具开发", "AI学习工具开发助理", "AI应用开发助理", "RAG知识库项目助理", "AI数据分析应用助理", "批量内容生成工具开发", "大模型API接入助理", "智能客服搭建助理", "AI工作流自动化助理"], "hourly": [197.5, 196.7, 196.5, 196.2, 196.0, 195.6, 195.0, 194.4, 194.4, 191.5], "monthly": [14231, 13933, 14662, 14052, 14067, 14023, 13739, 14304, 14155, 13651], "growth": [4.5, 4.5, 4.5, 4.5, 4.6, 4.5, 4.5, 4.5, 4.5, 4.5], "remote": [78.4, 78.7, 75.5, 73.7, 80.5, 77.2, 76.8, 76.3, 77.3, 77.1], "count": [513, 525, 477, 533, 497, 530, 495, 497, 498, 467]}, "quadrant": [{"name": "基础服务", "data": [[21.9, 2812, 814, "饮品店店员"], [21.8, 2786, 801, "快递打包员"], [21.9, 2769, 792, "校园配送员"], [22.2, 2843, 791, "商超理货员"], [22.1, 2832, 786, "景区引导员"], [22.1, 2811, 769, "门店促销员"], [21.8, 2769, 758, "仓库分拣员"], [22.1, 2811, 756, "活动执行助理"], [22.2, 2817, 756, "餐厅服务员"], [21.9, 2775, 754, "展会协助员"]]}, {"name": "普通数字岗位", "data": [[19.4, 3588, 555, "在线客服"], [19.2, 3507, 549, "表格数据处理员"], [19.5, 3475, 548, "店铺运营助理"], [19.2, 3502, 534, "商品信息录入员"], [18.9, 3451, 534, "短视频剪辑助理"], [18.7, 3361, 524, "平面素材处理助理"], [18.4, 3372, 508, "基础文案编辑"], [18.8, 3435, 490, "问卷数据整理员"], [18.5, 3299, 489, "线上课程助教"]]}, {"name": "Python", "data": [[17.1, 7056, 594, "电商数据分析助理"], [16.6, 6984, 584, "Python编程助教"], [16.5, 6840, 556, "Python开发助理"], [16.3, 6749, 556, "公开数据采集助理"], [16.8, 6965, 556, "Python数据清洗助理"], [16.3, 6879, 548, "自动化脚本开发"], [16.7, 6997, 546, "Web后端开发助理"], [16.6, 6808, 524, "数据分析助理"], [16.6, 6834, 522, "自动化测试助理"]]}, {"name": "AIGC", "data": [[16.7, 9338, 634, "AI商品图设计"], [16.6, 9375, 631, "AI文案创作助理"], [16.5, 9295, 617, "AI课件制作助理"], [16.4, 9395, 605, "AIGC内容运营"], [16.6, 9459, 601, "提示词优化助理"], [15.8, 8890, 600, "AI角色素材制作"], [16.3, 9229, 597, "数字人内容运营"], [16.7, 9427, 579, "AI创意策划助理"], [16.6, 9253, 577, "AI绘图设计助理"], [16.8, 9444, 557, "AI视频制作助理"]]}, {"name": "Python+AIGC", "data": [[16.6, 14052, 533, "AI应用开发助理"], [16.6, 14023, 530, "AI数据分析应用助理"], [16.4, 13933, 525, "智能选品工具开发"], [16.6, 14231, 513, "多模态数据处理助理"], [16.7, 14155, 498, "智能客服搭建助理"], [16.5, 14067, 497, "RAG知识库项目助理"], [17.0, 14304, 497, "大模型API接入助理"], [16.3, 13739, 495, "批量内容生成工具开发"], [17.2, 14662, 477, "AI学习工具开发助理"], [16.5, 13651, 467, "AI工作流自动化助理"]]}], "industry": {"industries": ["企业服务", "人工智能", "电子商务", "数据服务", "知识服务", "软件开发", "文化传媒", "教育科技", "办公自动化"], "rows": ["时薪（元）", "月收入（千元）", "远程占比（%）", "成长潜力（1-5）"], "data": [[0, 0, 58.3, 195.0, "元"], [1, 0, 78.3, 196.2, "元"], [2, 0, 86.7, 196.7, "元"], [3, 0, 100.0, 197.5, "元"], [4, 0, 75.0, 196.0, "元"], [5, 0, 48.3, 194.4, "元"], [6, 0, 58.3, 195.0, "元"], [7, 0, 83.3, 196.5, "元"], [8, 0, 0.0, 191.5, "元"], [0, 1, 40.0, 14.1, "千元"], [1, 1, 40.0, 14.1, "千元"], [2, 1, 20.0, 13.9, "千元"], [3, 1, 50.0, 14.2, "千元"], [4, 1, 40.0, 14.1, "千元"], [5, 1, 60.0, 14.3, "千元"], [6, 1, 0.0, 13.7, "千元"], [7, 1, 100.0, 14.7, "千元"], [8, 1, 0.0, 13.7, "千元"], [0, 2, 51.5, 77.2, "%"], [1, 2, 0.0, 73.7, "%"], [2, 2, 73.5, 78.7, "%"], [3, 2, 69.1, 78.4, "%"], [4, 2, 100.0, 80.5, "%"], [5, 2, 38.2, 76.3, "%"], [6, 2, 45.6, 76.8, "%"], [7, 2, 26.5, 75.5, "%"], [8, 2, 50.0, 77.1, "%"], [0, 3, 0.0, 4.5, "分"], [1, 3, 0.0, 4.5, "分"], [2, 3, 0.0, 4.5, "分"], [3, 3, 0.0, 4.5, "分"], [4, 3, 100.0, 4.6, "分"], [5, 3, 0.0, 4.5, "分"], [6, 3, 0.0, 4.5, "分"], [7, 3, 0.0, 4.5, "分"], [8, 3, 0.0, 4.5, "分"]], "samples": [1028, 533, 525, 513, 497, 497, 495, 477, 467]}};
+const COLORS = DATA.colors;
+const GROUPS = DATA.groups;
+
+const TT = {
+  backgroundColor: 'rgba(5, 13, 30, .95)',
+  borderColor: 'rgba(0, 229, 255, .38)',
+  borderWidth: 1,
+  padding: [8, 12],
+  textStyle: { color: '#dbe9ff', fontSize: 12 },
+  extraCssText: 'border-radius:8px;box-shadow:0 0 24px rgba(0,229,255,.25);backdrop-filter:blur(6px);'
+};
+const LEGEND = {
+  textStyle: { color: '#8fa3c8', fontSize: 11 },
+  itemWidth: 12, itemHeight: 6, icon: 'roundRect', top: 0, right: 0
+};
+const AL = { color: '#7d90b8', fontSize: 11 };
+const SPLIT = { lineStyle: { color: 'rgba(120,180,255,.08)' } };
+const AXIS_LINE = { lineStyle: { color: 'rgba(120,180,255,.22)' } };
+const charts = [];
+
+function initChart(id, option) {
+  const chart = echarts.init(document.getElementById(id));
+  chart.setOption(option);
+  charts.push(chart);
+  return chart;
+}
+function vGradient(c1, c2) {
+  return new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+    { offset: 0, color: c1 }, { offset: 1, color: c2 }
+  ]);
+}
+function hGradient(c1, c2) {
+  return new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+    { offset: 0, color: c1 }, { offset: 1, color: c2 }
+  ]);
+}
+function pulseSeries(extra) {
+  return Object.assign({
+    id: 'pulse',
+    type: 'effectScatter',
+    data: [],
+    symbolSize: 9,
+    rippleEffect: { scale: 5, brushType: 'stroke', period: 3 },
+    itemStyle: { color: '#ffffff', shadowBlur: 16, shadowColor: '#00e5ff' },
+    silent: true,
+    z: 30
+  }, extra || {});
+}
+/* 光点在各数据点之间循环跳动 */
+function runPulse(chart, points, interval) {
+  if (!points || !points.length) return;
+  let i = 0;
+  chart.setOption({ series: [{ id: 'pulse', data: [points[0]] }] });
+  setInterval(() => {
+    i = (i + 1) % points.length;
+    chart.setOption({ series: [{ id: 'pulse', data: [points[i]] }] });
+  }, interval);
+}
+/* 循环高亮 */
+function cycleHighlight(chart, count, interval, seriesIndex) {
+  const si = seriesIndex || 0;
+  let i = -1;
+  setInterval(() => {
+    if (i >= 0) chart.dispatchAction({ type: 'downplay', seriesIndex: si, dataIndex: i });
+    i = (i + 1) % count;
+    chart.dispatchAction({ type: 'highlight', seriesIndex: si, dataIndex: i });
+  }, interval);
+}
+/* 雷达：循环高亮各系列 */
+function cycleRadar(chart, count, interval) {
+  let i = 0;
+  setInterval(() => {
+    for (let k = 0; k < count; k++) {
+      chart.dispatchAction({ type: 'downplay', seriesIndex: 0, dataIndex: k });
+    }
+    chart.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: i });
+    i = (i + 1) % count;
+  }, interval);
+}
+
+/* ================= 1. 三口径薪资对比 ================= */
+(function () {
+  const d = DATA.salaryCompare;
+  const chart = initChart('salaryChart', {
+    color: [COLORS['Python+AIGC'], COLORS['基础服务']],
+    tooltip: Object.assign({ trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: v => Number(v).toLocaleString() + ' 元' }, TT),
+    legend: Object.assign({ data: ['Python+AIGC 复合型', '基础服务'] }, LEGEND),
+    grid: { left: 12, right: 18, top: 46, bottom: 8, containLabel: true },
+    xAxis: { type: 'category', data: d.categories, axisLine: AXIS_LINE, axisTick: { show: false }, axisLabel: AL },
+    yAxis: {
+      type: 'log', min: 10, max: 30000,
+      name: '元（对数轴）', nameTextStyle: { color: '#5d7099', fontSize: 10 },
+      axisLine: { show: false }, axisTick: { show: false },
+      axisLabel: Object.assign({}, AL, { formatter: v => v >= 10000 ? (v / 10000) + '万' : v }),
+      splitLine: SPLIT
+    },
+    series: [
+      {
+        name: 'Python+AIGC 复合型', type: 'bar', barWidth: 28, z: 2,
+        data: d.compound,
+        itemStyle: {
+          borderRadius: [6, 6, 0, 0],
+          color: vGradient('#5df6ff', 'rgba(0,120,255,.3)'),
+          shadowBlur: 18, shadowColor: 'rgba(0,229,255,.45)'
+        },
+        emphasis: { itemStyle: { color: vGradient('#ffffff', '#00e5ff'), shadowBlur: 30, shadowColor: '#00e5ff' } },
+        label: { show: true, position: 'top', color: '#8ff5ff', fontSize: 11, formatter: p => Number(p.value).toLocaleString() }
+      },
+      {
+        name: '基础服务', type: 'bar', barWidth: 28, z: 2,
+        data: d.basic,
+        itemStyle: {
+          borderRadius: [6, 6, 0, 0],
+          color: vGradient('#ff8aa1', 'rgba(255,92,124,.22)'),
+          shadowBlur: 14, shadowColor: 'rgba(255,92,124,.35)'
+        },
+        emphasis: { itemStyle: { color: vGradient('#ffffff', '#ff5c7c'), shadowBlur: 26, shadowColor: '#ff5c7c' } },
+        label: { show: true, position: 'top', color: '#ffb3c2', fontSize: 11, formatter: p => Number(p.value).toLocaleString() }
+      },
+      pulseSeries()
+    ]
+  });
+  runPulse(chart, [
+    [0, d.compound[0]], [0, d.basic[0]],
+    [1, d.compound[1]], [1, d.basic[1]],
+    [2, d.compound[2]], [2, d.basic[2]]
+  ], 1300);
+})();
+
+/* ================= 2. 时薪分位分布 ================= */
+(function () {
+  const d = DATA.box;
+  const chart = initChart('boxChart', {
+    tooltip: Object.assign({
+      trigger: 'item',
+      formatter: p => {
+        if (p.seriesType !== 'boxplot') return p.name || '';
+        const v = p.value;
+        return '<b>' + p.name + '</b><br/>最大值：' + v[4] + ' 元<br/>P75：' + v[3] + ' 元<br/>中位数：' + v[2] + ' 元<br/>P25：' + v[1] + ' 元<br/>最小值：' + v[0] + ' 元';
+      }
+    }, TT),
+    grid: { left: 12, right: 18, top: 28, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'category', data: d.groups,
+      axisLine: AXIS_LINE, axisTick: { show: false },
+      axisLabel: { color: '#7d90b8', fontSize: 10, interval: 0, formatter: v => v === 'Python+AIGC' ? '复合型' : v }
+    },
+    yAxis: {
+      type: 'value', name: '时薪（元）', nameTextStyle: { color: '#5d7099', fontSize: 10 },
+      axisLine: { show: false }, axisTick: { show: false }, axisLabel: AL, splitLine: SPLIT
+    },
+    series: [
+      {
+        name: '时薪分布', type: 'boxplot', data: d.data, z: 3,
+        itemStyle: { borderColor: '#00e5ff', borderWidth: 1.6, color: 'rgba(0,229,255,.1)' },
+        emphasis: { itemStyle: { borderColor: '#ffffff', borderWidth: 2.5, shadowBlur: 26, shadowColor: '#00e5ff', color: 'rgba(0,229,255,.28)' } }
+      },
+      pulseSeries({ symbolSize: 8, itemStyle: { color: '#ffffff', shadowBlur: 14, shadowColor: '#8b7cff' } })
+    ]
+  });
+  runPulse(chart, d.medians.map((v, i) => [i, v]), 1500);
+})();
+
+/* ================= 3. 技能组合溢价阶梯 ================= */
+(function () {
+  const d = DATA.ladder;
+  const names = d.labels.map(v => v === 'Python+AIGC' ? '复合型' : v);
+  const chart = initChart('ladderChart', {
+    tooltip: Object.assign({
+      trigger: 'axis', axisPointer: { type: 'shadow' },
+      formatter: params => {
+        const p = params[0];
+        const g = d.growth[p.dataIndex];
+        return '<b>' + p.name + '</b><br/>时薪均值：<span style="color:#00e5ff">' + p.value + ' 元</span>' +
+          (g === null ? '<br/>基准层级' : '<br/>较上一层级：<span style="color:#ffc857">+' + g + '%</span>');
+      }
+    }, TT),
+    grid: { left: 12, right: 66, top: 24, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'value', name: '元', nameTextStyle: { color: '#5d7099', fontSize: 10 },
+      axisLine: { show: false }, axisTick: { show: false }, axisLabel: AL, splitLine: SPLIT
+    },
+    yAxis: {
+      type: 'category', data: names, inverse: true,
+      axisLine: AXIS_LINE, axisTick: { show: false },
+      axisLabel: { color: '#9fb2d6', fontSize: 10 }
+    },
+    series: [
+      {
+        name: '时薪', type: 'bar', barWidth: 16, z: 2,
+        data: d.values.map((v, i) => ({
+          value: v,
+          itemStyle: {
+            borderRadius: [0, 8, 8, 0],
+            color: vGradient('rgba(255,255,255,.05)', i === d.values.length - 1 ? '#00e5ff' : 'rgba(0,229,255,.42)'),
+            shadowBlur: i === d.values.length - 1 ? 22 : 8,
+            shadowColor: i === d.values.length - 1 ? 'rgba(0,229,255,.65)' : 'rgba(0,229,255,.2)'
+          }
+        })),
+        emphasis: { itemStyle: { color: vGradient('#ffffff', '#00e5ff'), shadowBlur: 28, shadowColor: '#00e5ff' } },
+        label: {
+          show: true, position: 'right', color: '#9fe9ff', fontSize: 11,
+          formatter: p => {
+            const g = d.growth[p.dataIndex];
+            return p.value + ' 元' + (g === null ? '' : '  +' + g + '%');
+          }
+        }
+      },
+      pulseSeries({ symbolSize: 8 })
+    ]
+  });
+  runPulse(chart, d.values.map((v, i) => [v, i]), 1300);
+})();
+
+/* ================= 4. 薪资溢价走势 ================= */
+(function () {
+  const d = DATA.trend;
+  const chart = initChart('trendChart', {
+    color: ['#00e5ff', '#ff5c7c', '#8b7cff'],
+    tooltip: Object.assign({ trigger: 'axis', axisPointer: { type: 'cross', crossStyle: { color: 'rgba(0,229,255,.4)' } } }, TT),
+    legend: Object.assign({ data: ['复合型时薪', '基础服务时薪', '时薪差'] }, LEGEND),
+    grid: { left: 10, right: 18, top: 44, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'category', data: d.months, boundaryGap: true,
+      axisLine: AXIS_LINE, axisTick: { show: false },
+      axisLabel: { color: '#7d90b8', fontSize: 10, formatter: v => v.slice(2).replace('-', '/') }
+    },
+    yAxis: [
+      {
+        type: 'value', name: '复合型（元）', min: 140, max: 230,
+        nameTextStyle: { color: '#5d7099', fontSize: 10 },
+        axisLine: { show: false }, axisTick: { show: false }, axisLabel: AL, splitLine: SPLIT
+      },
+      {
+        type: 'value', name: '基础服务（元）', min: 20, max: 40,
+        nameTextStyle: { color: '#5d7099', fontSize: 10 },
+        axisLine: { show: false }, axisTick: { show: false }, axisLabel: AL, splitLine: { show: false }
+      }
+    ],
+    series: [
+      {
+        name: '时薪差', type: 'bar', yAxisIndex: 0, data: d.diff, barWidth: '34%', z: 1,
+        itemStyle: { borderRadius: [4, 4, 0, 0], color: 'rgba(139,124,255,.2)' },
+        emphasis: { itemStyle: { color: 'rgba(139,124,255,.45)' } }
+      },
+      {
+        name: '复合型时薪', type: 'line', yAxisIndex: 0, data: d.compound, smooth: true, z: 5,
+        symbol: 'circle', symbolSize: 6, showSymbol: false,
+        lineStyle: { width: 3, color: '#00e5ff', shadowBlur: 16, shadowColor: 'rgba(0,229,255,.7)' },
+        itemStyle: { color: '#00e5ff', borderColor: '#ffffff', borderWidth: 1 },
+        areaStyle: { color: vGradient('rgba(0,229,255,.26)', 'rgba(0,229,255,0)') },
+        emphasis: { scale: 1.8, itemStyle: { shadowBlur: 20, shadowColor: '#00e5ff' } }
+      },
+      {
+        name: '基础服务时薪', type: 'line', yAxisIndex: 1, data: d.basic, smooth: true, z: 4,
+        symbol: 'circle', symbolSize: 5, showSymbol: false,
+        lineStyle: { width: 2, color: '#ff5c7c', shadowBlur: 10, shadowColor: 'rgba(255,92,124,.5)' },
+        itemStyle: { color: '#ff5c7c' },
+        emphasis: { scale: 1.8 }
+      },
+      pulseSeries()
+    ]
+  });
+  runPulse(chart, d.compound.map((v, i) => [i, v]), 900);
+})();
+
+/* ================= 5. 招聘份额结构 ================= */
+(function () {
+  const d = DATA.share;
+  const order = ['基础服务', '普通数字岗位', 'Python', 'AIGC', 'Python+AIGC'];
+  const chart = initChart('shareChart', {
+    color: order.map(g => COLORS[g]),
+    tooltip: Object.assign({ trigger: 'axis', valueFormatter: v => v + '%' }, TT),
+    legend: Object.assign({ data: order.map(g => g === 'Python+AIGC' ? '复合型' : g) }, LEGEND),
+    grid: { left: 10, right: 14, top: 46, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'category', data: d.months, boundaryGap: false,
+      axisLine: AXIS_LINE, axisTick: { show: false },
+      axisLabel: { color: '#7d90b8', fontSize: 10, interval: 2, formatter: v => v.slice(2).replace('-', '/') }
+    },
+    yAxis: {
+      type: 'value', max: 100, name: '占比（%）', nameTextStyle: { color: '#5d7099', fontSize: 10 },
+      axisLine: { show: false }, axisTick: { show: false }, axisLabel: AL, splitLine: SPLIT
+    },
+    series: order.map((g, i) => ({
+      name: g === 'Python+AIGC' ? '复合型' : g,
+      type: 'line', stack: 'total', smooth: true,
+      data: d.series[g], showSymbol: false,
+      lineStyle: { width: 1, opacity: .9 },
+      areaStyle: { opacity: g === 'Python+AIGC' ? .8 : .42 },
+      emphasis: { focus: 'series', areaStyle: { opacity: .95 } },
+      z: i === order.length - 1 ? 6 : 2
+    })).concat([pulseSeries()])
+  });
+  runPulse(chart, d.series['Python+AIGC'].map((v, i) => [i, v]), 1000);
+})();
+
+/* ================= 6. 月度招聘趋势 ================= */
+(function () {
+  const d = DATA.recruit;
+  const chart = initChart('recruitChart', {
+    tooltip: Object.assign({ trigger: 'axis', valueFormatter: v => Number(v).toLocaleString() + ' 人' }, TT),
+    legend: Object.assign({ data: DATA.groups.map(g => g === 'Python+AIGC' ? '复合型' : g) }, LEGEND),
+    grid: { left: 10, right: 18, top: 44, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'category', data: d.months, boundaryGap: false,
+      axisLine: AXIS_LINE, axisTick: { show: false },
+      axisLabel: { color: '#7d90b8', fontSize: 10, formatter: v => v.slice(2).replace('-', '/') }
+    },
+    yAxis: {
+      type: 'value', name: '招聘人数（人）', nameTextStyle: { color: '#5d7099', fontSize: 10 },
+      axisLine: { show: false }, axisTick: { show: false }, axisLabel: AL, splitLine: SPLIT
+    },
+    series: DATA.groups.map(g => ({
+      name: g === 'Python+AIGC' ? '复合型' : g,
+      type: 'line', smooth: true, data: d.series[g],
+      symbol: 'circle', symbolSize: 4, showSymbol: false,
+      lineStyle: {
+        width: g === 'Python+AIGC' ? 3 : 1.6,
+        opacity: g === 'Python+AIGC' ? 1 : .75,
+        shadowBlur: g === 'Python+AIGC' ? 14 : 0,
+        shadowColor: 'rgba(0,229,255,.6)'
+      },
+      itemStyle: { color: COLORS[g] },
+      areaStyle: g === 'Python+AIGC' ? { color: vGradient('rgba(0,229,255,.22)', 'rgba(0,229,255,0)') } : undefined,
+      emphasis: { scale: 2 },
+      z: g === 'Python+AIGC' ? 6 : 3
+    })).concat([pulseSeries()])
+  });
+  runPulse(chart, d.series['Python+AIGC'].map((v, i) => [i, v]), 850);
+})();
+
+/* ================= 7. 城市等级薪资对比 ================= */
+(function () {
+  const d = DATA.cityLevel;
+  const chart = initChart('cityChart', {
+    color: ['#00e5ff', '#ff5c7c', '#ffc857'],
+    tooltip: Object.assign({ trigger: 'axis', axisPointer: { type: 'shadow' } }, TT),
+    legend: Object.assign({ data: ['复合型时薪', '基础服务时薪', '溢价倍数'] }, LEGEND),
+    grid: { left: 10, right: 16, top: 46, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'category', data: d.labels,
+      axisLine: AXIS_LINE, axisTick: { show: false }, axisLabel: { color: '#9fb2d6', fontSize: 11 }
+    },
+    yAxis: [
+      {
+        type: 'value', name: '时薪（元）', nameTextStyle: { color: '#5d7099', fontSize: 10 },
+        axisLine: { show: false }, axisTick: { show: false }, axisLabel: AL, splitLine: SPLIT
+      },
+      {
+        type: 'value', name: '倍数', min: 0, max: 8, nameTextStyle: { color: '#5d7099', fontSize: 10 },
+        axisLine: { show: false }, axisTick: { show: false }, axisLabel: AL, splitLine: { show: false }
+      }
+    ],
+    series: [
+      {
+        name: '复合型时薪', type: 'bar', barWidth: 22, data: d.compound, z: 3,
+        itemStyle: { borderRadius: [6, 6, 0, 0], color: vGradient('#5df6ff', 'rgba(0,120,255,.28)'), shadowBlur: 14, shadowColor: 'rgba(0,229,255,.4)' },
+        label: { show: true, position: 'top', color: '#8ff5ff', fontSize: 11 },
+        emphasis: { itemStyle: { color: vGradient('#ffffff', '#00e5ff'), shadowBlur: 26, shadowColor: '#00e5ff' } }
+      },
+      {
+        name: '基础服务时薪', type: 'bar', barWidth: 22, data: d.basic, z: 3,
+        itemStyle: { borderRadius: [6, 6, 0, 0], color: vGradient('#ff8aa1', 'rgba(255,92,124,.2)') },
+        label: { show: true, position: 'top', color: '#ffb3c2', fontSize: 11 },
+        emphasis: { itemStyle: { shadowBlur: 24, shadowColor: '#ff5c7c' } }
+      },
+      {
+        name: '溢价倍数', type: 'line', yAxisIndex: 1, data: d.multiple, z: 6,
+        symbol: 'circle', symbolSize: 9,
+        lineStyle: { width: 2, color: '#ffc857', type: 'dashed' },
+        itemStyle: { color: '#ffc857', borderColor: '#fff', borderWidth: 1 },
+        label: { show: true, position: 'right', color: '#ffd98a', fontSize: 11, formatter: '{c}×' },
+        emphasis: { scale: 1.8, itemStyle: { shadowBlur: 18, shadowColor: '#ffc857' } }
+      },
+      pulseSeries()
+    ]
+  });
+  runPulse(chart, d.compound.map((v, i) => [i, v]), 1300);
+})();
+
+/* ================= 8. 城市机会气泡 ================= */
+(function () {
+  const levels = ['一线', '新一线', '二线'];
+  const levelColor = { '一线': '#00e5ff', '新一线': '#8b7cff', '二线': '#4ade80' };
+  const chart = initChart('cityBubble', {
+    tooltip: Object.assign({
+      trigger: 'item',
+      formatter: p => {
+        const v = p.value;
+        return '<b>' + p.name + '</b><br/>城市等级：' + p.seriesName +
+          '<br/>复合型岗位：' + v[0] + ' 条<br/>平均时薪：<span style="color:#00e5ff">' + v[1] + ' 元</span>' +
+          '<br/>招聘人数：' + v[2] + ' 人';
+      }
+    }, TT),
+    legend: Object.assign({ data: levels }, LEGEND),
+    grid: { left: 14, right: 44, top: 46, bottom: 10, containLabel: true },
+    xAxis: {
+      type: 'value', name: '岗位数（条）', nameTextStyle: { color: '#5d7099', fontSize: 10 },
+      min: 180, max: 300,
+      axisLine: { show: false }, axisTick: { show: false }, axisLabel: AL, splitLine: SPLIT
+    },
+    yAxis: {
+      type: 'value', name: '时薪（元）', nameTextStyle: { color: '#5d7099', fontSize: 10 },
+      min: 150, max: 250,
+      axisLine: { show: false }, axisTick: { show: false }, axisLabel: AL, splitLine: SPLIT
+    },
+    series: levels.map(lv => ({
+      name: lv, type: 'effectScatter',
+      data: DATA.cityBubble.filter(c => c.level === lv),
+      symbolSize: v => Math.max(9, Math.min(26, Math.sqrt(v[2]) * 0.55)),
+      rippleEffect: { scale: 2.6, brushType: 'stroke', period: 3.5 },
+      itemStyle: { color: levelColor[lv], opacity: .88, shadowBlur: 12, shadowColor: levelColor[lv] },
+      emphasis: { scale: 1.6, label: { show: true, formatter: p => p.name, color: '#fff', fontSize: 11 } }
+    }))
+  });
+})();
+
+/* ================= 9. 六维能力雷达 ================= */
+(function () {
+  const d = DATA.radar;
+  const chart = initChart('radarChart', {
+    tooltip: Object.assign({ trigger: 'item' }, TT),
+    legend: Object.assign({ data: d.series.map(s => s.name), bottom: 0, top: 'auto' }, LEGEND),
+    radar: {
+      center: ['50%', '52%'],
+      radius: '62%',
+      indicator: d.indicators.map(name => ({ name, max: 100 })),
+      axisName: { color: '#9fb2d6', fontSize: 10 },
+      splitLine: { lineStyle: { color: 'rgba(0,229,255,.12)' } },
+      splitArea: { areaStyle: { color: ['rgba(0,229,255,.02)', 'rgba(0,229,255,.05)'] } },
+      axisLine: { lineStyle: { color: 'rgba(0,229,255,.14)' } }
+    },
+    series: [{
+      type: 'radar',
+      symbol: 'circle', symbolSize: 4,
+      data: d.series.map(s => ({
+        name: s.name,
+        value: s.value,
+        itemStyle: { color: COLORS[s.name] },
+        lineStyle: { color: COLORS[s.name], width: 2 },
+        areaStyle: { color: COLORS[s.name], opacity: s.name === 'Python+AIGC' ? .28 : .1 },
+        emphasis: {
+          lineStyle: { width: 4 },
+          areaStyle: { opacity: s.name === 'Python+AIGC' ? .45 : .28 }
+        }
+      }))
+    }]
+  });
+  const n = d.series.length;
+  let i = 0;
+  setInterval(() => {
+    for (let k = 0; k < n; k++) chart.dispatchAction({ type: 'downplay', seriesIndex: 0, dataIndex: k });
+    chart.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: i });
+    i = (i + 1) % n;
+  }, 2200);
+})();
+
+/* ================= 10. 复合岗位薪资排行 ================= */
+(function () {
+  const d = DATA.jobs;
+  const chart = initChart('jobChart', {
+    tooltip: Object.assign({
+      trigger: 'axis', axisPointer: { type: 'shadow' },
+      formatter: params => {
+        const p = params[0];
+        const i = p.dataIndex;
+        return '<b>' + p.name + '</b><br/>时薪均值：<span style="color:#00e5ff">' + d.hourly[i] + ' 元</span>' +
+          '<br/>月收入：' + d.monthly[i].toLocaleString() + ' 元<br/>样本数：' + d.count[i] +
+          ' 条<br/>成长潜力：' + d.growth[i] + ' / 5<br/>远程占比：' + d.remote[i] + '%';
+      }
+    }, TT),
+    grid: { left: 8, right: 52, top: 18, bottom: 6, containLabel: true },
+    xAxis: {
+      type: 'value', min: 185, max: 200, splitNumber: 5,
+      axisLine: { show: false }, axisTick: { show: false }, axisLabel: AL, splitLine: SPLIT
+    },
+    yAxis: {
+      type: 'category', data: d.names, inverse: true,
+      axisLine: AXIS_LINE, axisTick: { show: false },
+      axisLabel: { color: '#9fb2d6', fontSize: 9.5, formatter: v => v.length > 9 ? v.slice(0, 9) + '…' : v }
+    },
+    series: [{
+      type: 'bar', data: d.hourly, barWidth: 11, z: 2,
+      itemStyle: {
+        borderRadius: [0, 6, 6, 0],
+        color: hGradient('rgba(0,229,255,.18)', '#00e5ff'),
+        shadowBlur: 10, shadowColor: 'rgba(0,229,255,.35)'
+      },
+      emphasis: { itemStyle: { color: hGradient('rgba(255,255,255,.35)', '#ffffff'), shadowBlur: 22, shadowColor: '#00e5ff' } },
+      label: { show: true, position: 'right', color: '#8ff5ff', fontSize: 10, formatter: '{c}' }
+    }, pulseSeries({ symbolSize: 7 })]
+  });
+  runPulse(chart, d.hourly.map((v, i) => [v, i]), 950);
+})();
+
+/* ================= 11. 工时—收入效率象限 ================= */
+(function () {
+  const chart = initChart('quadrantChart', {
+    tooltip: Object.assign({
+      trigger: 'item',
+      formatter: p => {
+        const v = p.value;
+        return '<b>' + v[3] + '</b><br/>技能方向：' + p.seriesName +
+          '<br/>每周工时：' + v[0] + ' 小时<br/>月收入：<span style="color:#00e5ff">' + v[1].toLocaleString() + ' 元</span>' +
+          '<br/>样本数：' + v[2] + ' 条';
+      }
+    }, TT),
+    legend: Object.assign({ data: DATA.groups.map(g => g === 'Python+AIGC' ? '复合型' : g) }, LEGEND),
+    grid: { left: 14, right: 20, top: 46, bottom: 10, containLabel: true },
+    xAxis: {
+      type: 'value', name: '每周工时（小时）', min: 8, max: 32,
+      nameTextStyle: { color: '#5d7099', fontSize: 10 },
+      axisLine: { show: false }, axisTick: { show: false }, axisLabel: AL, splitLine: SPLIT
+    },
+    yAxis: {
+      type: 'value', name: '月收入（元）', min: 0, max: 18000,
+      nameTextStyle: { color: '#5d7099', fontSize: 10 },
+      axisLine: { show: false }, axisTick: { show: false },
+      axisLabel: Object.assign({}, AL, { formatter: v => v >= 10000 ? (v / 10000) + '万' : v }),
+      splitLine: SPLIT
+    },
+    graphic: [
+      { type: 'text', left: 78, top: 56, style: { text: '低工时 · 高收入', fill: 'rgba(0,229,255,.45)', font: '11px sans-serif' } },
+      { type: 'text', right: 34, bottom: 34, style: { text: '高工时 · 低收入', fill: 'rgba(125,144,184,.4)', font: '11px sans-serif' } }
+    ],
+    series: DATA.quadrant.map((g, idx) => ({
+      name: g.name === 'Python+AIGC' ? '复合型' : g.name,
+      type: 'effectScatter',
+      data: g.data,
+      symbolSize: v => Math.max(8, Math.min(40, Math.sqrt(v[2]) * 1.25)),
+      rippleEffect: { scale: 2.4, brushType: 'stroke', period: 4 },
+      itemStyle: {
+        color: COLORS[g.name],
+        opacity: g.name === 'Python+AIGC' ? .95 : .6,
+        shadowBlur: g.name === 'Python+AIGC' ? 16 : 6,
+        shadowColor: COLORS[g.name]
+      },
+      emphasis: { scale: 1.5, label: { show: true, formatter: p => p.value[3], color: '#fff', fontSize: 10 } },
+      markLine: idx === 0 ? {
+        silent: true, symbol: 'none',
+        lineStyle: { type: 'dashed', color: 'rgba(0,229,255,.28)', width: 1 },
+        label: { color: '#687ea8', fontSize: 9 },
+        data: [{ xAxis: 20 }, { yAxis: 9000 }]
+      } : undefined
+    }))
+  });
+})();
+
+/* ================= 12. 行业指标热力 ================= */
+(function () {
+  const d = DATA.industry;
+  const chart = initChart('heatmapChart', {
+    tooltip: Object.assign({
+      trigger: 'item',
+      formatter: p => {
+        const v = p.value;
+        const ind = d.industries[v[0]];
+        return '<b>' + ind + '</b><br/>' + d.rows[v[1]] + '：<span style="color:#00e5ff">' + v[3] + ' ' + v[4] + '</span>' +
+          '<br/>行业内相对水平：' + v[2] + ' / 100<br/>样本数：' + d.samples[v[0]] + ' 条';
+      }
+    }, TT),
+    grid: { left: 10, right: 20, top: 16, bottom: 52, containLabel: true },
+    xAxis: {
+      type: 'category', data: d.industries, splitArea: { show: true, areaStyle: { color: ['rgba(0,229,255,.015)', 'transparent'] } },
+      axisLine: AXIS_LINE, axisTick: { show: false },
+      axisLabel: { color: '#9fb2d6', fontSize: 9, interval: 0, rotate: 32, margin: 10 }
+    },
+    yAxis: {
+      type: 'category', data: d.rows, splitArea: { show: true, areaStyle: { color: ['rgba(0,229,255,.015)', 'transparent'] } },
+      axisLine: AXIS_LINE, axisTick: { show: false },
+      axisLabel: { color: '#9fb2d6', fontSize: 10 }
+    },
+    visualMap: {
+      min: 0, max: 100, dimension: 2, calculable: false,
+      orient: 'horizontal', left: 'center', bottom: 2,
+      itemWidth: 10, itemHeight: 70,
+      textStyle: { color: '#61769c', fontSize: 10 },
+      inRange: { color: ['#081a36', '#0c4a72', '#0090b0', '#00e5ff', '#c9fffb'] }
+    },
+    series: [{
+      type: 'heatmap',
+      data: d.data,
+      label: { show: false },
+      itemStyle: { borderColor: 'rgba(3,10,24,.85)', borderWidth: 2, borderRadius: 4 },
+      emphasis: { itemStyle: { shadowBlur: 18, shadowColor: 'rgba(0,229,255,.85)', borderColor: '#fff', borderWidth: 1.5 } }
+    }]
+  });
+  cycleHighlight(chart, d.data.length, 700, 0);
+})();
+
+/* ================= 交互与动效 ================= */
+function animateNumber(el) {
+  const target = parseFloat(el.dataset.target);
+  const decimals = parseInt(el.dataset.decimals || '0', 10);
+  const duration = 1600;
+  const start = performance.now();
+  function tick(now) {
+    const p = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    const v = target * eased;
+    el.textContent = decimals > 0
+      ? v.toFixed(decimals)
+      : Math.round(v).toLocaleString('en-US');
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+document.querySelectorAll('.kpi-value .num').forEach(animateNumber);
+
+function updateClock() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  document.getElementById('clock').textContent =
+    pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+  document.getElementById('date').textContent =
+    now.getFullYear() + '.' + pad(now.getMonth() + 1) + '.' + pad(now.getDate()) +
+    ' · Asia/Shanghai';
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+/* 漂浮粒子 */
+(function () {
+  const box = document.getElementById('particles');
+  for (let i = 0; i < 26; i++) {
+    const p = document.createElement('span');
+    const size = Math.random() * 3 + 1;
+    p.className = 'particle';
+    p.style.left = Math.random() * 100 + '%';
+    p.style.width = size + 'px';
+    p.style.height = size + 'px';
+    p.style.animationDuration = (12 + Math.random() * 16) + 's';
+    p.style.animationDelay = (-Math.random() * 20) + 's';
+    p.style.opacity = 0.25 + Math.random() * 0.45;
+    box.appendChild(p);
+  }
+})();
+
+window.addEventListener('resize', () => charts.forEach(c => c.resize()));
+</script>
+</body>
+</html>
