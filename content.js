@@ -36,7 +36,12 @@ const portfolio = {
     { category: "analysis", number: "17", title: "csv自动化大屏", description: "csv数据可视化大屏，支持数据筛选、图表切换。", tags: ["pandas", "pyecharts","Excel"], link: "Portfolio/csv自动化大屏/CSV自动大屏.html", accent: "coral", bgImage: "Portfolio/bgimgs/数据大屏.png"},
     { category: "creative", number: "18", title: "炫酷项目展示", description: "AIGC技术项目展示，展示AIGC技术项目，包括但不限于AI绘画、AI写作、AI编程等。", tags: ["AIGC", "提示词","python"], link: "Portfolio/炫酷项目展示.html", accent: "coral", bgImage: "Portfolio/bgimgs/AIGC.png"},
     { category: "creative", number: "19", title: "刘亦菲final", description: "刘亦菲是开阳心中最完美的女神", tags: ["beautiful", "lovely","pretty"], link: "Portfolio/刘亦菲.html", accent: "coral", bgImage: "Portfolio/bgimgs/刘亦菲.jpg"},
-    { category: "creative", number: "20", title: "鞠婧祎", description: "鞠婧祎四千年美女❤️", tags: ["patient", "lovely","humorous"], link: "Portfolio/鞠婧祎.html", accent: "coral", bgImage: "Portfolio/bgimgs/鞠婧祎.jpg"}
+    { category: "creative", number: "20", title: "鞠婧祎", description: "鞠婧祎四千年美女❤️", tags: ["patient", "lovely","humorous"], link: "Portfolio/鞠婧祎.html", accent: "coral", bgImage: "Portfolio/bgimgs/鞠婧祎.jpg"},
+    { category: "creative", number: "21", title: "压力粉碎机", description: "一件释放所有压力，so easy╰(*°▽°*)╯", tags: ["pressure", "release","chill"], link: "Portfolio/压力粉碎机.html", accent: "coral", bgImage: "Portfolio/bgimgs/压力粉碎.png"},
+    { category: "creative", number: "22", title: "复合型岗位可视化看板", description: "技能与薪水所得的部分对比", tags: ["salary", '当下热门岗位薪水所得'], link: "Portfolio/复合型岗位可视化看板.html", accent: "coral", bgImage: "Portfolio/bgimgs/薪水.jpeg"},
+    { category: "creative", number: "23", title: "复合型岗位数据大屏", description: "技能与薪水所得的部分对比", tags: ["visionable", '多层面综合分析复合型岗位'], link: "Portfolio/复合型岗位数据大屏.html", accent: "coral", bgImage: "Portfolio/bgimgs/复合岗位.jpeg"},
+    { category: "creative", number: "24", title: "Cammimi", description: "Camilla老师的一封家属", tags: ["superwoman", "lovely","responsible"], link: "Portfolio/小猫老师.html", accent: "coral", bgImage: "Portfolio/bgimgs/小猫老师.jpeg"},
+    { category: "creative", number: "25", title: "Ellen老师", description: "小狗之家的终极大boss", tags: ["patient", "energetic","humorous"], link: "Portfolio/Ellen老师.html", accent: "coral", bgImage: "Portfolio/bgimgs/可爱小狗.jpeg"},
 
   ]
 };
